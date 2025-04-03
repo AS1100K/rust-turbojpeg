@@ -8,9 +8,10 @@ use std::{env, fs};
 
 fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
-    let link_kind = get_link_kind()?;
-    let library = build_or_find_library(link_kind)?;
-    generate_or_copy_bindings(&library)?;
+    // let link_kind = get_link_kind()?;
+    // let library = build_or_find_library(link_kind)?;
+    // generate_or_copy_bindings(&library)?;
+    copy_pregenerated_bindings()?;
     Ok(())
 }
 
