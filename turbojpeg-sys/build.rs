@@ -1,10 +1,10 @@
 #![allow(unused_imports, dead_code)]
-use anyhow::{Result, Context as _, anyhow, bail};
-use std::{env, fs};
+use anyhow::{anyhow, bail, Context as _, Result};
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::process::Command;
+use std::{env, fs};
 
 fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
@@ -26,19 +26,17 @@ fn get_link_kind() -> Result<LinkKind> {
     let dynamic_env = env_bool("TURBOJPEG_DYNAMIC")?.or(env_bool("TURBOJPEG_SHARED")?);
 
     match (static_env, dynamic_env) {
-        (Some(true), Some(true)) =>
-            bail!("Both TURBOJPEG_STATIC and TURBOJPEG_DYNAMIC/TURBOJPEG_SHARED are set to 1"),
-        (Some(false), Some(false)) =>
-            bail!("Both TURBOJPEG_STATIC and TURBOJPEG_DYNAMIC/TURBOJPEG_SHARED are set to 0"),
-        (None, None) =>
-            Ok(LinkKind::Default),
-        (Some(true) | None, Some(false) | None) =>
-            Ok(LinkKind::Static),
-        (Some(false) | None, Some(true) | None) =>
-            Ok(LinkKind::Dynamic),
+        (Some(true), Some(true)) => {
+            bail!("Both TURBOJPEG_STATIC and TURBOJPEG_DYNAMIC/TURBOJPEG_SHARED are set to 1")
+        }
+        (Some(false), Some(false)) => {
+            bail!("Both TURBOJPEG_STATIC and TURBOJPEG_DYNAMIC/TURBOJPEG_SHARED are set to 0")
+        }
+        (None, None) => Ok(LinkKind::Default),
+        (Some(true) | None, Some(false) | None) => Ok(LinkKind::Static),
+        (Some(false) | None, Some(true) | None) => Ok(LinkKind::Dynamic),
     }
 }
-
 
 #[derive(Debug)]
 struct Library {
@@ -51,9 +49,9 @@ fn build_or_find_library(link_kind: LinkKind) -> Result<Library> {
         Some(source) => {
             if source.eq_ignore_ascii_case("vendor") {
                 build_vendor(link_kind)
-            } else if source.eq_ignore_ascii_case("pkg-config") ||
-                source.eq_ignore_ascii_case("pkgconfig") ||
-                source.eq_ignore_ascii_case("pkgconf")
+            } else if source.eq_ignore_ascii_case("pkg-config")
+                || source.eq_ignore_ascii_case("pkgconfig")
+                || source.eq_ignore_ascii_case("pkgconf")
             {
                 find_pkg_config(link_kind)
             } else if source.eq_ignore_ascii_case("explicit") {
@@ -64,7 +62,7 @@ fn build_or_find_library(link_kind: LinkKind) -> Result<Library> {
                     - 'pkg-config' to find the library using pkg-config,\n\
                     - 'explicit' to use TURBOJPEG_LIB_DIR and TURBOJPEG_INCLUDE_DIR")
             }
-        },
+        }
         None => {
             if cfg!(feature = "cmake") {
                 build_vendor(link_kind)
@@ -73,7 +71,7 @@ fn build_or_find_library(link_kind: LinkKind) -> Result<Library> {
             } else {
                 find_explicit(link_kind)
             }
-        },
+        }
     }
 }
 
@@ -84,12 +82,17 @@ fn find_pkg_config(link_kind: LinkKind) -> Result<Library> {
     let mut cfg = pkg_config::Config::new();
     cfg.atleast_version("3.0");
     match link_kind {
-        LinkKind::Static => { cfg.statik(true); },
-        LinkKind::Dynamic => { cfg.statik(false); },
-        LinkKind::Default => {},
+        LinkKind::Static => {
+            cfg.statik(true);
+        }
+        LinkKind::Dynamic => {
+            cfg.statik(false);
+        }
+        LinkKind::Default => {}
     }
 
-    let lib = cfg.probe("libturbojpeg")
+    let lib = cfg
+        .probe("libturbojpeg")
         .context("could not find turbojpeg using pkg-config")?;
 
     Ok(Library {
@@ -100,10 +103,12 @@ fn find_pkg_config(link_kind: LinkKind) -> Result<Library> {
 
 #[cfg(not(feature = "pkg-config"))]
 fn find_pkg_config(_: LinkKind) -> Result<Library> {
-    bail!("Trying to find turbojpeg using pkg-config, but the `pkg-config` feature is disabled. \
+    bail!(
+        "Trying to find turbojpeg using pkg-config, but the `pkg-config` feature is disabled. \
         You have two options:\n\
         - enable `pkg-config` feature of `turbojpeg-sys` crate\n\
-        - use TURBOJPEG_SOURCE to select other source for the library")
+        - use TURBOJPEG_SOURCE to select other source for the library"
+    )
 }
 
 fn find_explicit(link_kind: LinkKind) -> Result<Library> {
@@ -112,19 +117,23 @@ fn find_explicit(link_kind: LinkKind) -> Result<Library> {
     let lib_dir = env_path("TURBOJPEG_LIB_DIR")
         .or_else(|| env_path("TURBOJPEG_LIB_PATH"))
         .context("TURBOJPEG_SOURCE is set to 'explicit', but TURBOJPEG_LIB_DIR is not set")?;
-    let include_dir = env_path("TURBOJPEG_INCLUDE_DIR")
-        .or_else(|| env_path("TURBOJPEG_INCLUDE_PATH"));
+    let include_dir =
+        env_path("TURBOJPEG_INCLUDE_DIR").or_else(|| env_path("TURBOJPEG_INCLUDE_PATH"));
 
-    let lib_dir = fs::canonicalize(lib_dir)
-        .context("Cannot canonicalize TURBOJPEG_LIB_DIR")?;
-    let include_dir = include_dir.map(fs::canonicalize).transpose()
+    let lib_dir = fs::canonicalize(lib_dir).context("Cannot canonicalize TURBOJPEG_LIB_DIR")?;
+    let include_dir = include_dir
+        .map(fs::canonicalize)
+        .transpose()
         .context("Cannot canonicalize TURBOJPEG_INCLUDE_DIR")?;
 
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
-    println!("cargo:rustc-link-lib={}=turbojpeg", match link_kind {
-        LinkKind::Static | LinkKind::Default => "static",
-        LinkKind::Dynamic => "dylib",
-    });
+    println!(
+        "cargo:rustc-link-lib={}=turbojpeg",
+        match link_kind {
+            LinkKind::Static | LinkKind::Default => "static",
+            LinkKind::Dynamic => "dylib",
+        }
+    );
 
     Ok(Library {
         include_paths: include_dir.into_iter().collect(),
@@ -141,8 +150,15 @@ fn build_vendor(link_kind: LinkKind) -> Result<Library> {
 
     let source_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?).join("libjpeg-turbo");
     let mut cmake = cmake::Config::new(source_path);
-    cmake.configure_arg(format!("-DENABLE_SHARED={}", matches!(link_kind, LinkKind::Dynamic) as u32));
-    cmake.configure_arg(format!("-DENABLE_STATIC={}", !matches!(link_kind, LinkKind::Dynamic) as u32));
+    cmake.configure_arg(format!(
+        "-DENABLE_SHARED={}",
+        matches!(link_kind, LinkKind::Dynamic) as u32
+    ));
+    cmake.configure_arg(format!(
+        "-DENABLE_STATIC={}",
+        !matches!(link_kind, LinkKind::Dynamic) as u32
+    ));
+    cmake.configure_arg(String::from("-DCMAKE_POLICY_VERSION_MINIMUM=3.5"));
     // Ignore DESTDIR because it will install turbojpeg to the wrong location
     cmake.env("DESTDIR", "");
     // On some 64 bit targets, the default libdir would be set to lib64.
@@ -174,14 +190,18 @@ fn build_vendor(link_kind: LinkKind) -> Result<Library> {
     let is_msvc = env("CARGO_CFG_TARGET_ENV").unwrap() == "msvc";
 
     println!("cargo:rustc-link-search=native={}", lib_path.display());
-    println!("cargo:rustc-link-lib={}=turbojpeg{}", match link_kind {
-        LinkKind::Static | LinkKind::Default => "static",
-        LinkKind::Dynamic => "dylib",
-    }, if is_msvc && matches!(link_kind, LinkKind::Static | LinkKind::Default) {
-        "-static"
-    } else {
-        ""
-    });
+    println!(
+        "cargo:rustc-link-lib={}=turbojpeg{}",
+        match link_kind {
+            LinkKind::Static | LinkKind::Default => "static",
+            LinkKind::Dynamic => "dylib",
+        },
+        if is_msvc && matches!(link_kind, LinkKind::Static | LinkKind::Default) {
+            "-static"
+        } else {
+            ""
+        }
+    );
 
     Ok(Library {
         include_paths: vec![include_path],
@@ -190,7 +210,12 @@ fn build_vendor(link_kind: LinkKind) -> Result<Library> {
 }
 
 fn check_nasm() {
-    if !Command::new("nasm").arg("-v").status().map(|s| s.success()).unwrap_or(false) {
+    if !Command::new("nasm")
+        .arg("-v")
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+    {
         println!("cargo:warning=NASM does not seem to be installed, so turbojpeg will be compiled without \
             SIMD extensions. Performance will suffer.");
     }
@@ -198,13 +223,13 @@ fn check_nasm() {
 
 #[cfg(not(feature = "cmake"))]
 fn build_vendor(_link_kind: LinkKind) -> Result<Library> {
-    bail!("Trying to build turbojpeg from source, but the `cmake` feature is disabled.\
+    bail!(
+        "Trying to build turbojpeg from source, but the `cmake` feature is disabled.\
         You have two options:\n\
         - enable `cmake` feature of `turbojpeg-sys` crate\n\
-        - use TURBOJPEG_SOURCE to select other source for the library")
+        - use TURBOJPEG_SOURCE to select other source for the library"
+    )
 }
-
-
 
 fn generate_or_copy_bindings(library: &Library) -> Result<()> {
     match env("TURBOJPEG_BINDING") {
@@ -214,18 +239,20 @@ fn generate_or_copy_bindings(library: &Library) -> Result<()> {
             } else if binding.eq_ignore_ascii_case("bindgen") {
                 generate_bindings(library)
             } else {
-                bail!("Unknown value of TURBOJPEG_BINDING, supported values are:\n\
+                bail!(
+                    "Unknown value of TURBOJPEG_BINDING, supported values are:\n\
                     - `pregenerated` to use our pregenerated Rust bindings,\n\
-                    - `bindgen` to generate the bindings with bindgen")
+                    - `bindgen` to generate the bindings with bindgen"
+                )
             }
-        },
+        }
         None => {
             if cfg!(feature = "bindgen") {
                 generate_bindings(library)
             } else {
                 copy_pregenerated_bindings()
             }
-        },
+        }
     }
 }
 
@@ -234,7 +261,10 @@ fn copy_pregenerated_bindings() -> Result<()> {
     let out_path = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let crate_path = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
     fs::copy(crate_path.join("bindings.rs"), out_path.join("bindings.rs"))?;
-    println!("cargo:rerun-if-changed={}", crate_path.join("bindings.rs").to_str().unwrap());
+    println!(
+        "cargo:rerun-if-changed={}",
+        crate_path.join("bindings.rs").to_str().unwrap()
+    );
     Ok(())
 }
 
@@ -263,11 +293,13 @@ fn generate_bindings(library: &Library) -> Result<()> {
         }
     }
 
-    let bindings = builder.generate()
+    let bindings = builder
+        .generate()
         .map_err(|_| anyhow!("could not generate bindings"))?;
 
     let out_file = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("bindings.rs");
-    bindings.write_to_file(&out_file)
+    bindings
+        .write_to_file(&out_file)
         .context("could not write bindings to OUT_DIR")?;
     println!("Generated bindings are stored in {}", out_file.display());
 
@@ -276,13 +308,13 @@ fn generate_bindings(library: &Library) -> Result<()> {
 
 #[cfg(not(feature = "bindgen"))]
 fn generate_bindings(_: &Library) -> Result<()> {
-    bail!("Trying to build bindings with bindgen, but the `bindgen` feature is disabled. \
+    bail!(
+        "Trying to build bindings with bindgen, but the `bindgen` feature is disabled. \
         You have two options:\n\
         - enable `bindgen` feature of `turbojpeg-sys` crate\n\
-        - use TURBOJPEG_BINDING to select other method to obtain the bindings")
+        - use TURBOJPEG_BINDING to select other method to obtain the bindings"
+    )
 }
-
-
 
 fn env(name: &str) -> Option<OsString> {
     // adapted from `openssl-sys` crate
@@ -308,13 +340,21 @@ fn env_bool(name: &str) -> Result<Option<bool>> {
     match env(name) {
         Some(value) => {
             for v in ["", "1", "yes", "true", "on"].into_iter() {
-                if value.eq_ignore_ascii_case(v) { return Ok(Some(true)) }
+                if value.eq_ignore_ascii_case(v) {
+                    return Ok(Some(true));
+                }
             }
             for v in ["0", "no", "false", "off"].into_iter() {
-                if value.eq_ignore_ascii_case(v) { return Ok(Some(false)) }
+                if value.eq_ignore_ascii_case(v) {
+                    return Ok(Some(false));
+                }
             }
-            bail!("Env variable {} has value {:?}, expected empty or boolean", name, value)
-        },
+            bail!(
+                "Env variable {} has value {:?}, expected empty or boolean",
+                name,
+                value
+            )
+        }
         None => Ok(None),
     }
 }
